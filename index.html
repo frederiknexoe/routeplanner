@@ -983,6 +983,37 @@ select option{background:var(--bg-input)}
   animation:sporPuls 1.4s ease-in-out infinite;font-weight:800}
 @keyframes sporPuls{0%,100%{opacity:1}50%{opacity:.55}}
 
+/* Aktivitetsrapport — helskærms opsummering efter afsluttet spor */
+#rapport-overlay{position:fixed;inset:0;z-index:1300;display:none;
+  align-items:flex-start;justify-content:center;
+  background:rgba(10,14,13,.94);
+  padding:calc(env(safe-area-inset-top,0px) + 20px) 14px calc(env(safe-area-inset-bottom,0px) + 20px);
+  overflow-y:auto}
+#rapport-overlay.on{display:flex}
+#rapport-card{background:var(--bg-panel);border:1px solid var(--border-hi);border-radius:12px;
+  max-width:430px;width:100%;padding:18px;color:var(--text)}
+#rapport-card h2{font-family:var(--head);font-size:19px;letter-spacing:2px;color:var(--green-hi);margin:0 0 3px}
+#rapport-card .r-sub{font-size:10.5px;color:var(--text-dim);margin-bottom:14px}
+#rapport-card .r-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+#rapport-card .r-stat{background:var(--bg-input);border-radius:8px;padding:8px 10px}
+#rapport-card .r-stat .rs-lbl{font-size:8.5px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase}
+#rapport-card .r-stat .rs-val{font-family:var(--mono);font-size:16px;color:var(--green-hi);font-weight:700;margin-top:2px}
+#rapport-card .r-note{font-size:9.5px;color:var(--text-dim);margin:-6px 0 12px}
+#rapport-splits{max-height:150px;overflow-y:auto;font-family:var(--mono);font-size:11px;margin-bottom:14px;
+  border-top:1px solid var(--bg-input)}
+#rapport-splits div{display:flex;justify-content:space-between;padding:4px 2px;border-bottom:1px solid var(--bg-input)}
+#rapport-card .row{margin-top:4px}
+
+/* Genoptag-banner — vises hvis et spor overlevede en app-genstart */
+#resume-banner{position:fixed;left:8px;right:8px;
+  top:calc(env(safe-area-inset-top,0px) + 8px);z-index:1250;display:none;
+  background:rgba(224,168,32,.96);color:#0a0e0d;border-radius:10px;
+  padding:9px 12px;font-family:var(--mono);font-size:11.5px;
+  align-items:center;gap:8px;box-shadow:0 4px 14px rgba(0,0,0,.5)}
+#resume-banner.on{display:flex}
+#resume-banner button{font-family:var(--head);font-weight:800;font-size:10px;letter-spacing:1px;
+  border:none;border-radius:6px;padding:6px 10px;cursor:pointer}
+
 /* Tidskontrollen bliver siddende øverst når SIM-fanen rulles */
 #sim-timebar{position:sticky;top:-12px;z-index:20;
   background:var(--bg-panel);
@@ -1107,6 +1138,16 @@ input,select,textarea{font-size:16px!important}          /* under 16px zoomer iO
 <div id="disp-wait">
   <div class="dw-h">PRÆSENTATIONSSKÆRM</div>
   <div>Afventer forbindelse fra kontrolvinduet…</div>
+</div>
+
+<div id="resume-banner">
+  <span style="flex:1">⚠ Et ufuldført spor blev fundet fra sidste session.</span>
+  <button style="background:#0a0e0d;color:var(--yellow)" onclick="genoptagSpor()">GENOPTAG</button>
+  <button style="background:transparent;color:#0a0e0d;border:1.5px solid #0a0e0d" onclick="afvisGenoptag()">SLET</button>
+</div>
+
+<div id="rapport-overlay">
+  <div id="rapport-card"></div>
 </div>
 
 <div id="panel">
@@ -1244,8 +1285,23 @@ input,select,textarea{font-size:16px!important}          /* under 16px zoomer iO
       </div>
 
       <div class="sec" style="margin-top:8px">Spor (GPS-log)</div>
-      <div class="notice" style="font-size:9px">Optager den faktisk tilbagelagte rute som brødkrummer, mens GPS er aktiv. Kan eksporteres som GPX til efterbehandling.</div>
-      <div class="row">
+      <div class="notice" style="font-size:9px">Optager den faktisk tilbagelagte rute som brødkrummer, mens GPS er aktiv. Overlever appen at blive lukket af iOS, genoptages sporet automatisk.</div>
+
+      <div style="display:flex;gap:5px">
+        <div style="flex:1">
+          <div class="lbl">Type</div>
+          <select id="spor-type" onchange="opdaterSporFeltvisning()">
+            <option value="operativ">Operativ</option>
+            <option value="ruck">Ruck-træning</option>
+          </select>
+        </div>
+      </div>
+      <div id="spor-vaegt-felter" style="display:none;gap:5px;margin-top:4px">
+        <div style="flex:1"><div class="lbl">Kropsvægt (kg)</div><input type="number" id="spor-kropsvaegt" min="30" max="180" step="1" placeholder="f.eks. 82"></div>
+        <div style="flex:1"><div class="lbl">Rygsækvægt (kg)</div><input type="number" id="spor-rygsaek" min="0" max="80" step="0.5" placeholder="f.eks. 25"></div>
+      </div>
+
+      <div class="row" style="margin-top:6px">
         <button class="btn sm warn" id="btn-spor" onclick="toggleSpor()">● START SPOR</button>
         <button class="btn danger sm" onclick="rydSpor()">RYD SPOR</button>
       </div>
@@ -1254,7 +1310,10 @@ input,select,textarea{font-size:16px!important}          /* under 16px zoomer iO
         Tid: <span class="sv" id="spor-tid">00:00</span> &nbsp;|&nbsp;
         Punkter: <span class="sv" id="spor-punkter">0</span>
       </div>
-      <button class="btn sm" onclick="exportSporGPX()" style="margin-top:6px" id="btn-spor-eksport" disabled>⬇ EKSPORTER GPX</button>
+      <div class="row" style="margin-top:6px">
+        <button class="btn sm" onclick="exportSporGPX()" id="btn-spor-eksport" disabled>⬇ GPX</button>
+        <button class="btn sm" style="border-color:var(--green-hi)" onclick="visRapport()" id="btn-spor-rapport" disabled>📋 AFSLUT & RAPPORT</button>
+      </div>
 
       <div id="nav-extras" style="display:none">
         <div class="sec">Grafiske linjer</div>
@@ -2603,6 +2662,8 @@ document.addEventListener('click',e2=>{
 let gpsId=null, egen=null, egenMark=null, egenRing=null, folger=false;
 let maal=null, maalMark=null, maalLinje=null;
 let sporAktiv=false, sporPunkter=[], sporLine=null, sporStartTid=null, sporDistKm=0, sporUrInterval=null;
+let sporHoejdeOp=0, sporHoejdeNed=0, sidsteHoejde=null, sporSplits=[], sporSidsteKmMaerke=0;
+let wakeLock=null, genoptagData=null;
 
 function afstandKm(a,b){
   const R=6371,r=d=>d*Math.PI/180;
@@ -2649,7 +2710,7 @@ function toggleGps(){
 }
 function gpsOk(p){
   const la=p.coords.latitude, lo=p.coords.longitude;
-  egen={pos:[la,lo], nsk:p.coords.accuracy, kurs:p.coords.heading, fart:p.coords.speed};
+  egen={pos:[la,lo], nsk:p.coords.accuracy, kurs:p.coords.heading, fart:p.coords.speed, alt:p.coords.altitude};
   const kurs=(egen.kurs!=null&&!isNaN(egen.kurs));
   const ikon=L.divIcon({className:'egen-pos',
     html:`<div class="ep${kurs?' kurs':''}"${kurs?` style="transform:rotate(${egen.kurs-45}deg)"`:''}></div>`,
@@ -2662,7 +2723,7 @@ function gpsOk(p){
   const fart=(egen.fart!=null&&!isNaN(egen.fart))?'  '+fartTxt(egen.fart*3.6):'';
   document.getElementById('nb-egen').textContent=fmtMGRS(la,lo,6,false)+fart;
   if(folger) map.setView(egen.pos,map.getZoom(),{animate:false});
-  if(sporAktiv) sporTilfoej(la,lo);
+  if(sporAktiv) sporTilfoej(la,lo,p.coords.altitude);
   opdaterMaal();
 }
 function gpsFejl(e){
@@ -2680,12 +2741,78 @@ function toggleFolg(){
 }
 
 // ── SPOR (GPS-log / brødkrummespor) ──
+function opdaterSporFeltvisning(){
+  const t=document.getElementById('spor-type').value;
+  document.getElementById('spor-vaegt-felter').style.display=(t==='ruck')?'flex':'none';
+}
+
+async function laasSkaermOp(){
+  try{ if('wakeLock' in navigator) wakeLock=await navigator.wakeLock.request('screen'); }
+  catch(e){ /* ikke understøttet af browseren, eller afvist — fortsætter uden skærmlås */ }
+}
+function frigivSkaermLaas(){
+  if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock=null; }
+}
+document.addEventListener('visibilitychange',()=>{
+  if(sporAktiv && document.visibilityState==='visible' && !wakeLock) laasSkaermOp();
+});
+
+function gemSporLokalt(){
+  try{
+    localStorage.setItem('ops-nav-spor', JSON.stringify({
+      punkter:sporPunkter, distKm:sporDistKm, startTid:sporStartTid,
+      hoejdeOp:sporHoejdeOp, hoejdeNed:sporHoejdeNed, sidsteHoejde:sidsteHoejde,
+      splits:sporSplits, sidsteKmMaerke:sporSidsteKmMaerke,
+      type:document.getElementById('spor-type')?.value,
+      kropsvaegt:document.getElementById('spor-kropsvaegt')?.value,
+      rygsaek:document.getElementById('spor-rygsaek')?.value
+    }));
+  }catch(e){ /* localStorage utilgængelig — fortsætter uden autosave */ }
+}
+function ryddSporLokalt(){ try{ localStorage.removeItem('ops-nav-spor'); }catch(e){} }
+
+function tjekGenoptagSpor(){
+  try{
+    const raw=localStorage.getItem('ops-nav-spor');
+    if(!raw) return;
+    const data=JSON.parse(raw);
+    if(!data.punkter || !data.punkter.length){ localStorage.removeItem('ops-nav-spor'); return; }
+    genoptagData=data;
+    document.getElementById('resume-banner').classList.add('on');
+  }catch(e){}
+}
+function genoptagSpor(){
+  if(!genoptagData) return;
+  sporPunkter=genoptagData.punkter; sporDistKm=genoptagData.distKm||0;
+  sporStartTid=genoptagData.startTid||Date.now();
+  sporHoejdeOp=genoptagData.hoejdeOp||0; sporHoejdeNed=genoptagData.hoejdeNed||0;
+  sidsteHoejde=genoptagData.sidsteHoejde||null; sporSplits=genoptagData.splits||[];
+  sporSidsteKmMaerke=genoptagData.sidsteKmMaerke||0;
+  if(genoptagData.type) document.getElementById('spor-type').value=genoptagData.type;
+  opdaterSporFeltvisning();
+  if(genoptagData.kropsvaegt) document.getElementById('spor-kropsvaegt').value=genoptagData.kropsvaegt;
+  if(genoptagData.rygsaek) document.getElementById('spor-rygsaek').value=genoptagData.rygsaek;
+  if(!sporLine) sporLine=L.polyline([],{color:'#e0a820',weight:3,opacity:.85,dashArray:'2,7'}).addTo(map);
+  sporLine.setLatLngs(sporPunkter.map(p=>p.pos));
+  opdaterSporStats();
+  document.getElementById('btn-spor-eksport').disabled=false;
+  document.getElementById('btn-spor-rapport').disabled=false;
+  document.getElementById('resume-banner').classList.remove('on');
+  toggleSpor();
+}
+function afvisGenoptag(){
+  ryddSporLokalt(); genoptagData=null;
+  document.getElementById('resume-banner').classList.remove('on');
+}
+
 function toggleSpor(){
   const b=document.getElementById('btn-spor');
   if(sporAktiv){
     sporAktiv=false;
     b.classList.remove('on'); b.textContent='● START SPOR';
     if(sporUrInterval){ clearInterval(sporUrInterval); sporUrInterval=null; }
+    frigivSkaermLaas();
+    gemSporLokalt();
     return;
   }
   if(gpsId===null) toggleGps();
@@ -2695,21 +2822,36 @@ function toggleSpor(){
   if(!sporLine){
     sporLine=L.polyline([],{color:'#e0a820',weight:3,opacity:.85,dashArray:'2,7'}).addTo(map);
   }
-  if(egen && sporPunkter.length===0) sporTilfoej(egen.pos[0],egen.pos[1]);
+  if(egen && sporPunkter.length===0) sporTilfoej(egen.pos[0],egen.pos[1],egen.alt);
   document.getElementById('btn-spor-eksport').disabled=false;
+  document.getElementById('btn-spor-rapport').disabled=false;
   if(!sporUrInterval) sporUrInterval=setInterval(opdaterSporUr,1000);
+  laasSkaermOp();
 }
-function sporTilfoej(lat,lng){
+function sporTilfoej(lat,lng,alt){
   const nu=[lat,lng];
   if(sporPunkter.length){
     const sidst=sporPunkter[sporPunkter.length-1];
     const d=afstandKm(sidst.pos,nu);
     if(d<0.008) return;               // min. 8 m mellem punkter — filtrerer GPS-støj i stilstand
     sporDistKm+=d;
+    const heltKm=Math.floor(sporDistKm);
+    if(heltKm>sporSidsteKmMaerke){
+      sporSidsteKmMaerke=heltKm;
+      sporSplits.push({km:heltKm, sekunder:Math.floor((Date.now()-sporStartTid)/1000)});
+    }
   }
-  sporPunkter.push({pos:nu, t:Date.now()});
+  if(alt!=null && !isNaN(alt)){
+    if(sidsteHoejde!=null){
+      const dh=alt-sidsteHoejde;
+      if(dh>0.5) sporHoejdeOp+=dh; else if(dh<-0.5) sporHoejdeNed+=-dh;
+    }
+    sidsteHoejde=alt;
+  }
+  sporPunkter.push({pos:nu, t:Date.now(), alt:(alt!=null&&!isNaN(alt))?alt:null});
   sporLine.setLatLngs(sporPunkter.map(p=>p.pos));
   opdaterSporStats();
+  gemSporLokalt();
 }
 function opdaterSporStats(){
   const de=document.getElementById('spor-dist'); if(de) de.textContent=sporDistKm.toFixed(2).replace('.',',');
@@ -2724,18 +2866,22 @@ function opdaterSporUr(){
 }
 function rydSpor(){
   sporAktiv=false; sporPunkter=[]; sporDistKm=0; sporStartTid=null;
+  sporHoejdeOp=0; sporHoejdeNed=0; sidsteHoejde=null; sporSplits=[]; sporSidsteKmMaerke=0;
   if(sporLine){ map.removeLayer(sporLine); sporLine=null; }
   if(sporUrInterval){ clearInterval(sporUrInterval); sporUrInterval=null; }
+  frigivSkaermLaas();
+  ryddSporLokalt();
   const b=document.getElementById('btn-spor'); if(b){ b.classList.remove('on'); b.textContent='● START SPOR'; }
   const de=document.getElementById('spor-dist'); if(de) de.textContent='0,0';
   const te=document.getElementById('spor-tid'); if(te) te.textContent='00:00';
   const pe=document.getElementById('spor-punkter'); if(pe) pe.textContent='0';
   const eb=document.getElementById('btn-spor-eksport'); if(eb) eb.disabled=true;
+  const rb=document.getElementById('btn-spor-rapport'); if(rb) rb.disabled=true;
 }
 function exportSporGPX(){
   if(!sporPunkter.length) return;
   const trkpts=sporPunkter.map(p=>
-    `      <trkpt lat="${p.pos[0].toFixed(6)}" lon="${p.pos[1].toFixed(6)}"><time>${new Date(p.t).toISOString()}</time></trkpt>`
+    `      <trkpt lat="${p.pos[0].toFixed(6)}" lon="${p.pos[1].toFixed(6)}">${p.alt!=null?`<ele>${p.alt.toFixed(1)}</ele>`:''}<time>${new Date(p.t).toISOString()}</time></trkpt>`
   ).join('\n');
   const gpx=`<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="OPS-NAV" xmlns="http://www.topografix.com/GPX/1/1">
@@ -2747,6 +2893,116 @@ ${trkpts}
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   a.href=url; a.download=`ops-spor-${new Date().toISOString().slice(0,10)}.gpx`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Pandolf-ligningen (1977) for energiforbrug ved belastet march.
+// Konservativt: nedstigning modregnes ikke i stigningsleddet.
+function pandolfWatt(W,L,v,G){
+  const eta=1.0;                        // terrænfaktor: fast vej/sti
+  const Gp=Math.max(G,0);
+  return 1.5*W + 2.0*(W+L)*Math.pow(L/(W||1),2) + eta*(W+L)*(1.5*v*v + 0.35*v*Gp);
+}
+
+function visRapport(){
+  if(sporAktiv) toggleSpor();
+  if(!sporPunkter.length) return;
+  const slutTid=sporPunkter[sporPunkter.length-1].t;
+  const totalSek=Math.max(1, Math.round((slutTid - sporStartTid)/1000));
+  const distKm=sporDistKm;
+  const tempoSekPrKm=distKm>0 ? totalSek/distKm : 0;
+  const tempoMin=Math.floor(tempoSekPrKm/60), tempoSekR=Math.round(tempoSekPrKm%60);
+  const type=document.getElementById('spor-type').value;
+  const rygsaek=parseFloat(document.getElementById('spor-rygsaek')?.value)||0;
+  const kropsvaegt=parseFloat(document.getElementById('spor-kropsvaegt')?.value)||0;
+  const timer=Math.floor(totalSek/3600), min=Math.floor((totalSek%3600)/60), sek=totalSek%60;
+  const tidTxt=(timer?String(timer).padStart(2,'0')+':':'')+String(min).padStart(2,'0')+':'+String(sek).padStart(2,'0');
+
+  let kalorierHtml='', kalorieNote='';
+  if(type==='ruck'){
+    if(kropsvaegt>0){
+      const v=distKm*1000/totalSek;
+      const G=distKm>0 ? ((sporHoejdeOp-sporHoejdeNed)/(distKm*1000))*100 : 0;
+      const kcal=Math.round(pandolfWatt(kropsvaegt,rygsaek,v,G)*totalSek/4184);
+      kalorierHtml=`<div class="r-stat"><div class="rs-lbl">Kalorier (Pandolf-estimat)</div><div class="rs-val">${kcal} kcal</div></div>`;
+    } else {
+      kalorieNote='<div class="r-note">Angiv kropsvægt for et kalorieestimat.</div>';
+    }
+  }
+  const rygsaekHtml=(type==='ruck') ? `
+    <div class="r-stat"><div class="rs-lbl">Rygsækvægt</div><div class="rs-val">${rygsaek||'—'} kg</div></div>
+    <div class="r-stat"><div class="rs-lbl">Load × distance</div><div class="rs-val">${(rygsaek*distKm).toFixed(1)} kg·km</div></div>` : '';
+
+  let splitsHtml=sporSplits.map((s,i)=>{
+    const forrige=i>0 ? sporSplits[i-1].sekunder : 0;
+    const varighed=s.sekunder-forrige;
+    const m=Math.floor(varighed/60), sc=varighed%60;
+    return `<div><span>Km ${s.km}</span><span>${String(m).padStart(2,'0')}:${String(sc).padStart(2,'0')}</span></div>`;
+  }).join('');
+  if(!splitsHtml) splitsHtml='<div style="color:var(--text-dim);padding:6px 2px">Ingen fulde kilometer nået</div>';
+
+  document.getElementById('rapport-card').innerHTML=`
+    <h2>${type==='ruck'?'RUCK-RAPPORT':'AKTIVITETSRAPPORT'}</h2>
+    <div class="r-sub">${new Date(sporStartTid).toLocaleString('da-DK')}</div>
+    <div class="r-grid">
+      <div class="r-stat"><div class="rs-lbl">Distance</div><div class="rs-val">${distKm.toFixed(2).replace('.',',')} km</div></div>
+      <div class="r-stat"><div class="rs-lbl">Tid</div><div class="rs-val">${tidTxt}</div></div>
+      <div class="r-stat"><div class="rs-lbl">Snittempo</div><div class="rs-val">${String(tempoMin).padStart(2,'0')}:${String(tempoSekR).padStart(2,'0')} /km</div></div>
+      <div class="r-stat"><div class="rs-lbl">Højdemeter</div><div class="rs-val">↑${Math.round(sporHoejdeOp)} ↓${Math.round(sporHoejdeNed)} m</div></div>
+      ${rygsaekHtml}
+      ${kalorierHtml}
+    </div>
+    ${kalorieNote}
+    <div class="lbl">Kilometersplits</div>
+    <div id="rapport-splits">${splitsHtml}</div>
+    <div class="row">
+      <button class="btn sm" onclick="exportSporGPX()">⬇ GPX</button>
+      <button class="btn sm" onclick="exportRapportTekst()">⬇ TEKST</button>
+      <button class="btn sm danger" onclick="lukRapport()">LUK</button>
+    </div>`;
+  document.getElementById('rapport-overlay').classList.add('on');
+}
+function lukRapport(){ document.getElementById('rapport-overlay').classList.remove('on'); }
+function exportRapportTekst(){
+  if(!sporPunkter.length) return;
+  const slutTid=sporPunkter[sporPunkter.length-1].t;
+  const totalSek=Math.max(1, Math.round((slutTid - sporStartTid)/1000));
+  const type=document.getElementById('spor-type').value;
+  const rygsaek=parseFloat(document.getElementById('spor-rygsaek')?.value)||0;
+  const kropsvaegt=parseFloat(document.getElementById('spor-kropsvaegt')?.value)||0;
+  const timer=Math.floor(totalSek/3600), min=Math.floor((totalSek%3600)/60), sek=totalSek%60;
+  const tidTxt=(timer?String(timer).padStart(2,'0')+':':'')+String(min).padStart(2,'0')+':'+String(sek).padStart(2,'0');
+  const tempoSekPrKm=sporDistKm>0 ? totalSek/sporDistKm : 0;
+  const linjer=[
+    'OPS-NAV AKTIVITETSRAPPORT',
+    `Type: ${type==='ruck'?'Ruck-træning':'Operativ'}`,
+    `Start: ${new Date(sporStartTid).toLocaleString('da-DK')}`,
+    `Distance: ${sporDistKm.toFixed(2)} km`,
+    `Tid: ${tidTxt}`,
+    `Snittempo: ${Math.floor(tempoSekPrKm/60)}:${String(Math.round(tempoSekPrKm%60)).padStart(2,'0')} /km`,
+    `Højdemeter: +${Math.round(sporHoejdeOp)} / -${Math.round(sporHoejdeNed)} m`
+  ];
+  if(type==='ruck'){
+    linjer.push(`Rygsækvægt: ${rygsaek} kg`);
+    linjer.push(`Load x distance: ${(rygsaek*sporDistKm).toFixed(1)} kg·km`);
+    if(kropsvaegt>0){
+      const v=sporDistKm*1000/totalSek;
+      const G=sporDistKm>0 ? ((sporHoejdeOp-sporHoejdeNed)/(sporDistKm*1000))*100 : 0;
+      const kcal=Math.round(pandolfWatt(kropsvaegt,rygsaek,v,G)*totalSek/4184);
+      linjer.push(`Estimeret kalorieforbrug (Pandolf): ${kcal} kcal`);
+    }
+  }
+  linjer.push('', 'Kilometersplits:');
+  sporSplits.forEach((s,i)=>{
+    const forrige=i>0 ? sporSplits[i-1].sekunder : 0;
+    const v=s.sekunder-forrige;
+    linjer.push(`  Km ${s.km}: ${String(Math.floor(v/60)).padStart(2,'0')}:${String(v%60).padStart(2,'0')}`);
+  });
+  const blob=new Blob([linjer.join('\n')],{type:'text/plain'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=`ops-rapport-${new Date().toISOString().slice(0,10)}.txt`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
@@ -2810,6 +3066,7 @@ map.on('moveend zoomend',opdaterKryds);
 
 opdaterKryds();
 
+tjekGenoptagSpor();
 opdaterMaalforhold();
 drawNorthDiagram();
 
