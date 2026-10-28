@@ -330,6 +330,14 @@ select option{background:var(--input)}
       </div>
       <button class="btn danger sm" onclick="clearRings()">FJERN RINGE</button>
 
+      <div class="sec">Min position</div>
+      <button class="btn" id="btn-locate" onclick="toggleLocate()">📡 VIS MIN POSITION</button>
+      <div class="ibox hidden" id="locate-info" style="font-size:11px;line-height:1.8;margin-top:4px">
+        <div>Position: <span style="color:var(--green)" id="loc-coords">—</span></div>
+        <div>Nøjagtighed: <span style="color:var(--green)" id="loc-acc">—</span></div>
+        <div>Højde: <span style="color:var(--green)" id="loc-elev">—</span></div>
+      </div>
+
       <div class="sec">Street View</div>
       <button class="btn sm" id="btn-sv" onclick="toggleStreetView()">🔍 STREET VIEW</button>
     </div>
@@ -1507,6 +1515,67 @@ async function fetchWeather(){
   }finally{
     btn.textContent='HENT VEJR FOR PUNKT';
   }
+}
+
+// ══════════════════════════════════════════════
+//  MIN POSITION — rød plet (Geolocation, kræver HTTPS)
+// ══════════════════════════════════════════════
+let locateActive=false, locateMarker=null, locateCircle=null, locateWatchId=null;
+
+const _locStyle=document.createElement('style');
+_locStyle.textContent='@keyframes pulse-loc{0%,100%{transform:scale(1);opacity:.6}50%{transform:scale(1.9);opacity:0}}';
+document.head.appendChild(_locStyle);
+
+function toggleLocate(){
+  locateActive=!locateActive;
+  const btn=document.getElementById('btn-locate');
+  const info=document.getElementById('locate-info');
+  if(locateActive){
+    if(!window.isSecureContext && location.protocol!=='https:'){
+      info.classList.remove('hidden');
+      document.getElementById('loc-coords').textContent='Kræver HTTPS';
+      document.getElementById('loc-acc').textContent='—';
+      document.getElementById('loc-elev').textContent='—';
+      alert('Positionering kræver en sikker forbindelse (HTTPS).\n\nÅbnet lokalt (file://) blokerer browseren adgang til din placering. Kør filen fra GitHub Pages, så virker den.');
+      locateActive=false; return;
+    }
+    btn.textContent='📡 STOP POSITION'; btn.classList.add('active-tool');
+    info.classList.remove('hidden');
+    document.getElementById('loc-coords').textContent='Henter…';
+    document.getElementById('loc-acc').textContent='…';
+    document.getElementById('loc-elev').textContent='…';
+    if(!('geolocation' in navigator)){alert('Geolocation understøttes ikke af denne browser');locateActive=false;btn.textContent='📡 VIS MIN POSITION';return;}
+    locateWatchId=navigator.geolocation.watchPosition(onLocateSuccess,onLocateError,{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+  } else {
+    btn.textContent='📡 VIS MIN POSITION'; btn.classList.remove('active-tool');
+    info.classList.add('hidden');
+    if(locateWatchId!=null){navigator.geolocation.clearWatch(locateWatchId);locateWatchId=null;}
+    if(locateMarker){map.removeLayer(locateMarker);locateMarker=null;}
+    if(locateCircle){map.removeLayer(locateCircle);locateCircle=null;}
+  }
+}
+
+function onLocateSuccess(pos){
+  const lat=pos.coords.latitude, lng=pos.coords.longitude, acc=pos.coords.accuracy, elev=pos.coords.altitude;
+  const ll=L.latLng(lat,lng);
+  if(!locateMarker){
+    locateMarker=L.marker(ll,{icon:L.divIcon({
+      html:`<div style="position:relative;display:flex;align-items:center;justify-content:center">
+        <div style="width:16px;height:16px;background:#e01010;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 2px #e01010,0 2px 8px rgba(0,0,0,.6)"></div>
+        <div style="position:absolute;width:34px;height:34px;border-radius:50%;border:2px solid rgba(224,16,16,.5);animation:pulse-loc 1.5s infinite"></div>
+      </div>`,className:'',iconAnchor:[8,8]}),zIndexOffset:1000}).addTo(map);
+    map.setView(ll,map.getZoom()<14?15:map.getZoom());
+  } else { locateMarker.setLatLng(ll); }
+  if(locateCircle){map.removeLayer(locateCircle);}
+  locateCircle=L.circle(ll,{radius:acc,color:'#e01010',weight:1,fillColor:'#e01010',fillOpacity:.08,interactive:false}).addTo(map);
+  document.getElementById('loc-coords').textContent=fmtMGRS(lat,lng);
+  document.getElementById('loc-acc').textContent=`±${Math.round(acc)} m`;
+  document.getElementById('loc-elev').textContent=elev!=null?`${Math.round(elev)} m`:'— (GPS-højde)';
+}
+
+function onLocateError(err){
+  const msgs={1:'Adgang nægtet — tillad lokation',2:'Position ikke tilgængelig',3:'Timeout — prøv igen'};
+  document.getElementById('loc-coords').textContent=msgs[err.code]||'Fejl';
 }
 
 console.log('%cOPS-PLANNER MOBIL initialiseret ✓','color:#72c48a;font-weight:bold');
